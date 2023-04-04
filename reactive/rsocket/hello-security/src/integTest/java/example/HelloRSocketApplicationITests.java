@@ -15,21 +15,21 @@
  */
 package example;
 
+import io.rsocket.exceptions.RejectedSetupException;
 import io.rsocket.metadata.WellKnownMimeType;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
-
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.rsocket.server.LocalRSocketServerPort;
 import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.security.rsocket.metadata.SimpleAuthenticationEncoder;
 import org.springframework.security.rsocket.metadata.UsernamePasswordMetadata;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.MimeTypeUtils;
+import reactor.core.publisher.Mono;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 /**
  * Integration tests for the rsocket application.
@@ -40,36 +40,63 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @TestPropertySource(properties = "spring.rsocket.server.port=0")
-public class HelloRSocketApplicationITests {
+class HelloRSocketApplicationITests {
 
 	@Autowired
 	RSocketRequester.Builder requester;
 
-	@LocalRSocketServerPort
+	// @LocalRSocketServerPort
+	@Value("${local.rsocket.server.port}")
 	int port;
 
 	@Test
 	void messageWhenAuthenticatedThenSuccess() {
-		UsernamePasswordMetadata credentials = new UsernamePasswordMetadata("user", "password");
-		// @formatter:off
-		RSocketRequester requester = this.requester
-				.rsocketStrategies((builder) -> builder.encoder(new SimpleAuthenticationEncoder()))
-				.setupMetadata(credentials, MimeTypeUtils.parseMimeType(WellKnownMimeType.MESSAGE_RSOCKET_AUTHENTICATION.getString()))
-				.connectTcp("localhost", this.port)
-				.block();
-		// @formatter:on
+		UsernamePasswordMetadata credentials =
+				new UsernamePasswordMetadata("user", "password");
 
-		String message = requester.route("message").data(Mono.empty()).retrieveMono(String.class).block();
+		RSocketRequester requester = this.requester
+				.rsocketStrategies(builder ->
+						builder.encoder(new SimpleAuthenticationEncoder())
+				)
+				.setupMetadata(
+						credentials,
+						MimeTypeUtils.parseMimeType(
+								WellKnownMimeType.MESSAGE_RSOCKET_AUTHENTICATION.getString()
+						)
+				)
+				.tcp("localhost", this.port);
+
+		String message = requester
+				.route("message")
+				.data(Mono.empty())
+				.retrieveMono(String.class)
+				.block();
 
 		assertThat(message).isEqualTo("Hello");
 	}
 
 	@Test
 	void messageWhenNotAuthenticatedThenError() {
-		RSocketRequester requester = this.requester.connectTcp("localhost", this.port).block();
+		UsernamePasswordMetadata invalidCredentials =
+				new UsernamePasswordMetadata("invalid user", "bad password");
 
-		assertThatThrownBy(() -> requester.route("message").data(Mono.empty()).retrieveMono(String.class).block())
-				.isNotNull();
+		RSocketRequester requester = this.requester
+				.rsocketStrategies(builder ->
+						builder.encoder(new SimpleAuthenticationEncoder())
+				)
+				.setupMetadata(
+						invalidCredentials,
+						MimeTypeUtils.parseMimeType(
+								WellKnownMimeType.MESSAGE_RSOCKET_AUTHENTICATION.getString()
+						)
+				)
+				.tcp("localhost", this.port);
+
+		assertThatExceptionOfType(RejectedSetupException.class).isThrownBy(() ->
+				requester.route("message")
+						.data(Mono.empty())
+						.retrieveMono(String.class)
+						.block()
+		).withMessageContaining("Invalid Credentials");
 	}
-
 }
