@@ -1,8 +1,11 @@
 gretty {
-	servletContainer = "tomcat9"
+	servletContainer = "tomcat10"
 	contextPath = "/"
 	fileLogEnabled = false
 	integrationTestTask = 'integrationTest'
+	httpsEnabled = true
+	sslKeyStorePath = 'certs/server.p12'
+	sslKeyStorePassword = 'password'
 }
 
 Task prepareAppServerForIntegrationTests = project.tasks.create('prepareAppServerForIntegrationTests') {
