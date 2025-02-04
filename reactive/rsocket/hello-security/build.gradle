@@ -9,6 +9,10 @@ repositories {
 	mavenCentral()
 }
 
+// Override the RSocket version to see if 1.1.4+ fixes
+// https://github.com/rsocket/rsocket-java/issues/1087.
+ext['rsocket.version'] = '1.1.4'
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-rsocket'
